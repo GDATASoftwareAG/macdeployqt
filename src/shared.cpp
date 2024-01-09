@@ -450,6 +450,20 @@ QStringList findAppFrameworkPaths(const QString &appBundlePath)
     return frameworks;
 }
 
+QStringList findExtensionBundlePaths(const QString &appBundlePath)
+{
+    QStringList appexBundles;
+    QString searchPath = appBundlePath + "/Contents/PlugIns";
+    QDirIterator iter(searchPath, QStringList() << QString::fromLatin1("*.appex"),
+                      QDir::Dirs | QDir::NoSymLinks);
+    while (iter.hasNext())
+    {
+        iter.next();
+        appexBundles << iter.fileInfo().filePath();
+    }
+    return appexBundles;
+}
+
 QStringList findAppLibraries(const QString &appBundlePath)
 {
     QStringList result;
@@ -1431,6 +1445,24 @@ QSet<QString> codesignBundle(const QString &identity,
 
     bool getAbsolutePath = true;
     QStringList foundPluginBinaries = findAppBundleFiles(appBundlePath + "/Contents/PlugIns/", getAbsolutePath);
+
+    // Search for .appex extensions
+    QStringList foundPluginExtensions = findExtensionBundlePaths(appBundlePath);
+
+    // Check if we have any .appex (extension) bundles in the PlugIns directory
+    for (const auto& extensionPath : foundPluginExtensions)
+    {
+        LogNormal() << "Found extension bundle for signing:" << extensionPath;
+
+        // Remove all files of this extension bundle from the plugin binaries list, it will be codesigned as a bundle
+        foundPluginBinaries.removeIf([extensionPath](const QString& str)
+                                     {
+                                         return str.startsWith(extensionPath);
+                                     });
+        codesignBundle(identity, extensionPath, QStringList());
+    }
+
+
     foreach (const QString &binary, foundPluginBinaries) {
          pendingBinaries.push(binary);
          pendingBinariesSet.insert(binary);
